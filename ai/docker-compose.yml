@@ -1,0 +1,66 @@
+version: "3.9"
+
+# ============================================================
+#  AI — Ollama + AnythingLLM
+#  Richiede: NVIDIA Container Toolkit + Docker Desktop GPU support
+# ============================================================
+
+services:
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.40
+
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    container_name: anythingllm
+    restart: unless-stopped
+    ports:
+      - "3004:3001"
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_PATH=http://ollama:11434
+      - OLLAMA_MODEL_PREF=llama3.2        # cambia con il modello che preferisci
+      - OLLAMA_MODEL_TOKEN_LIMIT=4096
+      - EMBEDDING_ENGINE=ollama
+      - EMBEDDING_MODEL_PREF=nomic-embed-text
+      - EMBEDDING_MODEL_MAX_CHUNK_LENGTH=8192
+      - VECTOR_DB=lancedb
+      - DISABLE_TELEMETRY=true
+    volumes:
+      - anythingllm_data:/app/server/storage
+    depends_on:
+      - ollama
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.41
+
+networks:
+  homelab_net:
+    external: true
+
+volumes:
+  ollama_data:
+    external: true
+  anythingllm_data:
+    external: true

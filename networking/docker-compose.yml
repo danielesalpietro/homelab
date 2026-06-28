@@ -1,0 +1,33 @@
+version: "3.9"
+
+# ============================================================
+#  NETWORKING — AdGuard Home DNS
+# ============================================================
+
+services:
+
+  adguard:
+    image: adguard/adguardhome:latest
+    container_name: adguard
+    restart: unless-stopped
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "3000:3000/tcp"   # Web UI setup (primo avvio)
+      - "8080:80/tcp"     # Web UI dopo setup
+    volumes:
+      - adguard_data:/opt/adguardhome/work
+      - adguard_conf:/opt/adguardhome/conf
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.10
+
+networks:
+  homelab_net:
+    external: true
+
+volumes:
+  adguard_data:
+    external: true
+  adguard_conf:
+    external: true

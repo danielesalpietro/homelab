@@ -1,0 +1,60 @@
+version: "3.9"
+
+# ============================================================
+#  SECURITY — Authelia (SSO/MFA) + Twingate
+#  Twingate: il connector si registra via token, zero porte esposte
+# ============================================================
+
+services:
+
+  # ── Authelia ─────────────────────────────────────────────
+  authelia_redis:
+    image: redis:7-alpine
+    container_name: authelia_redis
+    restart: unless-stopped
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.50
+
+  authelia:
+    image: authelia/authelia:latest
+    container_name: authelia
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+    volumes:
+      - authelia_data:/config
+      - ./authelia/configuration.yml:/config/configuration.yml:ro
+      - ./authelia/users_database.yml:/config/users_database.yml
+    environment:
+      - TZ=Europe/Rome
+    depends_on:
+      - authelia_redis
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.51
+
+  # ── Twingate Connector ───────────────────────────────────
+  # Richiede: account Twingate + TWINGATE_ACCESS_TOKEN + TWINGATE_REFRESH_TOKEN
+  # Genera i token su: app.twingate.com → Connectors → Deploy Connector
+  twingate:
+    image: twingate/connector:latest
+    container_name: twingate
+    restart: unless-stopped
+    environment:
+      - TWINGATE_NETWORK=${TWINGATE_NETWORK}           # es: mycompany.twingate.com
+      - TWINGATE_ACCESS_TOKEN=${TWINGATE_ACCESS_TOKEN}
+      - TWINGATE_REFRESH_TOKEN=${TWINGATE_REFRESH_TOKEN}
+    cap_add:
+      - NET_ADMIN
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.52
+
+networks:
+  homelab_net:
+    external: true
+
+volumes:
+  authelia_data:
+    external: true

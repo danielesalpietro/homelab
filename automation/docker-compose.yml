@@ -1,0 +1,153 @@
+version: "3.9"
+
+# ============================================================
+#  AUTOMATION — n8n + Ansible Semaphore + NetBox + Home Assistant
+# ============================================================
+
+services:
+
+  # ── n8n ──────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=changeme       # cambia in .env
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Rome
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.30
+
+  # ── Ansible Semaphore ────────────────────────────────────
+  semaphore_db:
+    image: postgres:15-alpine
+    container_name: semaphore_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: semaphore
+      POSTGRES_PASSWORD: semaphore_pass        # cambia in .env
+      POSTGRES_DB: semaphore
+    volumes:
+      - semaphore_data:/var/lib/postgresql/data
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.31
+
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    container_name: semaphore
+    restart: unless-stopped
+    ports:
+      - "3003:3000"
+    environment:
+      SEMAPHORE_DB_USER: semaphore
+      SEMAPHORE_DB_PASS: semaphore_pass        # cambia in .env
+      SEMAPHORE_DB_HOST: semaphore_db
+      SEMAPHORE_DB_PORT: "5432"
+      SEMAPHORE_DB_DIALECT: postgres
+      SEMAPHORE_DB: semaphore
+      SEMAPHORE_PLAYBOOK_PATH: /tmp/semaphore/
+      SEMAPHORE_ADMIN_PASSWORD: changeme       # cambia in .env
+      SEMAPHORE_ADMIN_NAME: admin
+      SEMAPHORE_ADMIN_EMAIL: admin@homelab.local
+      SEMAPHORE_ADMIN: admin
+      SEMAPHORE_ACCESS_KEY_ENCRYPTION: a-random-32-char-string-here    # genera con: openssl rand -base64 32
+    depends_on:
+      - semaphore_db
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.32
+
+  # ── NetBox ───────────────────────────────────────────────
+  netbox_db:
+    image: postgres:15-alpine
+    container_name: netbox_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netbox_pass           # cambia in .env
+      POSTGRES_DB: netbox
+    volumes:
+      - netbox_postgres:/var/lib/postgresql/data
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.33
+
+  netbox_redis:
+    image: redis:7-alpine
+    container_name: netbox_redis
+    restart: unless-stopped
+    volumes:
+      - netbox_redis:/data
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.34
+
+  netbox:
+    image: netboxcommunity/netbox:latest
+    container_name: netbox
+    restart: unless-stopped
+    ports:
+      - "8000:8080"
+    environment:
+      - SUPERUSER_NAME=admin
+      - SUPERUSER_EMAIL=admin@homelab.local
+      - SUPERUSER_PASSWORD=changeme            # cambia in .env
+      - ALLOWED_HOSTS=*
+      - DB_HOST=netbox_db
+      - DB_NAME=netbox
+      - DB_USER=netbox
+      - DB_PASSWORD=netbox_pass               # cambia in .env
+      - REDIS_HOST=netbox_redis
+      - REDIS_PORT=6379
+      - SECRET_KEY=a-very-long-random-secret-key-here   # genera con: openssl rand -base64 64
+    volumes:
+      - netbox_data:/opt/netbox/netbox/media
+    depends_on:
+      - netbox_db
+      - netbox_redis
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.35
+
+  # ── Home Assistant ───────────────────────────────────────
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    environment:
+      - TZ=Europe/Rome
+    volumes:
+      - homeassistant_data:/config
+    privileged: true                           # necessario per accesso hardware
+    network_mode: host                         # necessario per discovery mDNS/UPnP
+
+networks:
+  homelab_net:
+    external: true
+
+volumes:
+  n8n_data:
+    external: true
+  semaphore_data:
+    external: true
+  netbox_data:
+    external: true
+  netbox_postgres:
+    external: true
+  netbox_redis:
+    external: true
+  homeassistant_data:
+    external: true
